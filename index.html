@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id-ID">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tryout PPPK Tenaga Pendidikan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#0F766E', secondary: '#115E59' } } } }
+    </script>
+    <style>
+        .pilihan-jawaban { cursor: pointer; user-select: none; }
+        .pilihan-jawaban:hover { background-color: #ecfdf5; border-color: #6ee7b7; }
+        .terpilih { background-color: #d1fae5 !important; border-color: #10b981 !important; color: #065f46 !important; font-weight: 600; }
+        .sudah-dijawab { background-color: #f0fdf4; color: #166534; border-color: #86efac; }
+        .soal-saat-ini { background-color: #eff6ff; border-color: #93c5fd; box-shadow: 0 0 0 2px #bfdbfe; }
+        .loading { display: none; text-align: center; padding: 10px; color: #0F766E; }
+        .loading.aktif { display: block; }
+        .putar { animation: berputar 1s linear infinite; }
+        @keyframes berputar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<header class="bg-primary text-white shadow sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+        <div>
+            <h1 class="text-lg font-bold">Tryout PPPK Tenaga Pendidikan</h1>
+            <p class="text-xs opacity-90">Maksimal 50 Soal | Waktu 90 Menit</p>
+        </div>
+        <div class="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg">
+            <i class="fa fa-clock-o mr-1"></i>
+            <span id="timer" class="font-mono font-bold">01:30:00</span>
+        </div>
+    </div>
+</header>
+
+<div class="container mx-auto px-4 py-6">
+    <div id="pesan-error" class="hidden max-w-md mx-auto bg-red-100 p-4 rounded-lg text-red-700 mb-4"></div>
+    <div id="pesan-berhasil" class="hidden max-w-md mx-auto bg-green-100 p-4 rounded-lg text-green-700 mb-4"></div>
+
+    <div id="form-identitas" class="max-w-md mx-auto bg-white p-6 rounded-xl shadow mt-10">
+        <h2 class="text-xl font-bold text-center mb-5">Masukkan Data Peserta</h2>
+        <div class="space-y-4">
+            <input type="text" id="nama-peserta" placeholder="Nama Lengkap" class="w-full p-3 border rounded-lg" required>
+            <input type="text" id="asal-sekolah" placeholder="Asal Sekolah/Instansi" class="w-full p-3 border rounded-lg" required>
+            <div id="sedang-memuat" class="loading"><i class="fa fa-spinner putar mr-2"></i>Sedang memuat soal...</div>
+            <button id="tombol-mulai" class="w-full bg-primary text-white py-3 rounded-lg hover:bg-secondary">Mulai Ujian</button>
+        </div>
+    </div>
+
+    <div id="halaman-ujian" class="hidden">
+        <div class="flex flex-col lg:flex-row gap-6">
+            <div class="w-full lg:w-3/4 bg-white rounded-xl shadow p-6">
+                <div class="flex justify-between items-center mb-4 pb-3 border-b">
+                    <h2 class="font-semibold">Soal <span id="nomor-soal">1</span> dari <span id="total-soal">50</span></h2>
+                    <span class="text-sm text-gray-500">Kategori: <span id="kategori-soal">-</span></span>
+                </div>
+                <div id="teks-soal" class="text-lg mb-6 min-h-[100px]"></div>
+                <div id="pilihan-jawaban" class="space-y-3 mb-8"></div>
+                <div class="flex justify-between">
+                    <button id="btn-sebelumnya" class="px-5 py-2 bg-gray-200 rounded-lg disabled:opacity-50">Sebelumnya</button>
+                    <button id="btn-selanjutnya" class="px-5 py-2 bg-primary text-white rounded-lg">Selanjutnya</button>
+                </div>
+            </div>
+            <div class="w-full lg:w-1/4 bg-white rounded-xl shadow p-5 h-fit">
+                <h3 class="font-semibold mb-3">Navigasi Soal</h3>
+                <div id="navigasi" class="grid grid-cols-5 gap-2"></div>
+                <button id="btn-selesai" class="w-full mt-6 py-2 bg-red-600 text-white rounded-lg">Akhiri Ujian</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="halaman-hasil" class="hidden max-w-2xl mx-auto bg-white rounded-xl shadow p-8 text-center mt-10">
+        <h2 class="text-2xl font-bold mb-4">✅ Hasil Ujian</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+            <div class="bg-blue-50 p-4 rounded"><p class="text-sm">Total Soal</p><p class="text-xl font-bold" id="h-total">0</p></div>
+            <div class="bg-green-50 p-4 rounded"><p class="text-sm">Benar</p><p class="text-xl font-bold" id="h-benar">0</p></div>
+            <div class="bg-red-50 p-4 rounded"><p class="text-sm">Salah</p><p class="text-xl font-bold" id="h-salah">0</p></div>
+            <div class="bg-amber-50 p-4 rounded"><p class="text-sm">Nilai</p><p class="text-xl font-bold" id="h-nilai">0</p></div>
+        </div>
+        <p id="status-lulus" class="text-lg font-semibold mt-4 mb-6"></p>
+        <button id="btn-ujian-ulang" class="hidden px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-medium">Coba Ujian Lagi</button>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyA0H2F5z7-3MVFXBeqBEuUJ7sYZt48C_PQ",
+  authDomain: "pppk-2bde2.firebaseapp.com",
+  projectId: "pppk-2bde2",
+  storageBucket: "pppk-2bde2.firebasestorage.app",
+  messagingSenderId: "993392180424",
+  appId: "1:993392180424:web:7859ec4e038a1ca570b9fd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let daftarSoal = [], soalSaatIni = 0, jawabanPengguna = [], waktuSisa = 90 * 60, timer, dataPeserta = {}, nilaiLulus = 70, percobaanKe = 1;
+
+function tampilkanError(pesan) {
+    const el = document.getElementById('pesan-error');
+    el.textContent = pesan; el.classList.remove('hidden');
+}
+function tampilkanBerhasil(pesan) {
+    const el = document.getElementById('pesan-berhasil');
+    el.textContent = pesan; el.classList.remove('hidden');
+    setTimeout(()=>el.classList.add('hidden'),4000);
+}
+
+async function ambilDataDariServer() {
+    document.getElementById('sedang-memuat').classList.add('aktif');
+    document.getElementById('tombol-mulai').disabled = true;
+    try {
+        const snapSoal = await db.ref('soal').once('value');
+        const dataMentah = snapSoal.val();
+        if (!dataMentah) { tampilkanError("⚠️ Belum ada soal dimasukkan!"); return false; }
+        daftarSoal = Object.values(dataMentah).slice(0,50);
+        jawabanPengguna = Array(daftarSoal.length).fill(null);
+        const snapPengaturan = await db.ref('pengaturan').once('value');
+        nilaiLulus = snapPengaturan.val()?.nilaiLulus || 70;
+        return true;
+    } catch (err) { tampilkanError("Gagal ambil: " + err.message); return false; }
+    finally { document.getElementById('sedang-memuat').classList.remove('aktif'); document.getElementById('tombol-mulai').disabled = false; }
+}
+
+async function mulaiUjian() {
+    const nama = document.getElementById('nama-peserta').value.trim();
+    const asal = document.getElementById('asal-sekolah').value.trim();
+    if (!nama || !asal) return alert('Lengkapi data dulu!');
+    dataPeserta = { nama, asal, waktuMulai: new Date().toISOString() };
+    percobaanKe = 1;
+    const dataSiap = await ambilDataDariServer();
+    if (!dataSiap) return;
+    document.getElementById('form-identitas').classList.add('hidden');
+    document.getElementById('halaman-ujian').classList.remove('hidden');
+    document.getElementById('halaman-hasil').classList.add('hidden');
+    document.getElementById('total-soal').textContent = daftarSoal.length;
+    buatNavigasi(); muatSoal(); mulaiTimer();
+}
+
+function ujianUlang() {
+    percobaanKe++; soalSaatIni = 0; jawabanPengguna = Array(daftarSoal.length).fill(null); waktuSisa = 90*60;
+    document.getElementById('halaman-hasil').classList.add('hidden'); document.getElementById('halaman-ujian').classList.remove('hidden');
+    buatNavigasi(); muatSoal(); mulaiTimer();
+}
+
+function pilihJawaban(huruf) {
+    jawabanPengguna[soalSaatIni] = huruf;
+    muatSoal();
+    // ✅ TAMBAHAN: Jika ini soal terakhir yang dijawab, langsung hitung nilai
+    if (soalSaatIni === daftarSoal.length - 1) {
+        setTimeout(() => {
+            if (confirm('Anda baru saja menjawab soal terakhir. Ingin langsung melihat hasil?')) {
+                selesaikan();
+            }
+        }, 300);
+    }
+}
+
+function muatSoal() {
+    const s = daftarSoal[soalSaatIni];
+    document.getElementById('nomor-soal').textContent = soalSaatIni+1;
+    document.getElementById('kategori-soal').textContent = s.kategori||'-';
+    document.getElementById('teks-soal').textContent = s.soal||'';
+    const elPilihan = document.getElementById('pilihan-jawaban'); elPilihan.innerHTML = '';
+    if(s.pilihan){
+        if(s.pilihan.A&&s.pilihan.A!=='Tidak ada') elPilihan.innerHTML += `<div class="border rounded p-3 pilihan-jawaban ${jawabanPengguna[soalSaatIni]==='A'?'terpilih':''}" onclick="pilihJawaban('A')"><span class="font-bold">A.</span> ${s.pilihan.A}</div>`;
+        if(s.pilihan.B&&s.pilihan.B!=='Tidak ada') elPilihan.innerHTML += `<div class="border rounded p-3 pilihan-jawaban ${jawabanPengguna[soalSaatIni]==='B'?'terpilih':''}" onclick="pilihJawaban('B')"><span class="font-bold">B.</span> ${s.pilihan.B}</div>`;
+        if(s.pilihan.C&&s.pilihan.C!=='Tidak ada') elPilihan.innerHTML += `<div class="border rounded p-3 pilihan-jawaban ${jawabanPengguna[soalSaatIni]==='C'?'terpilih':''}" onclick="pilihJawaban('C')"><span class="font-bold">C.</span> ${s.pilihan.C}</div>`;
+        if(s.pilihan.D&&s.pilihan.D!=='Tidak ada') elPilihan.innerHTML += `<div class="border rounded p-3 pilihan-jawaban ${jawabanPengguna[soalSaatIni]==='D'?'terpilih':''}" onclick="pilihJawaban('D')"><span class="font-bold">D.</span> ${s.pilihan.D}</div>`;
+        if(s.pilihan.E&&s.pilihan.E!=='Tidak ada') elPilihan.innerHTML += `<div class="border rounded p-3 pilihan-jawaban ${jawabanPengguna[soalSaatIni]==='E'?'terpilih':''}" onclick="pilihJawaban('E')"><span class="font-bold">E.</span> ${s.pilihan.E}</div>`;
+    }
+    document.getElementById('btn-sebelumnya').disabled = soalSaatIni===0; perbaruiNavigasi();
+}
+
+function buatNavigasi() {
+    const elNav = document.getElementById('navigasi'); elNav.innerHTML = '';
+    daftarSoal.forEach((_,i)=>{
+        const btn = document.createElement('button');
+        btn.className = `w-8 h-8 rounded border text-sm ${jawabanPengguna[i]?'sudah-dijawab':''}`;
+        btn.textContent = i+1; btn.onclick = ()=>{soalSaatIni=i; muatSoal();};
+        elNav.appendChild(btn);
+    });
+}
+function perbaruiNavigasi() {
+    document.querySelectorAll('#navigasi button').forEach((btn,i)=>{
+        btn.classList.remove('soal-saat-ini'); if(i===soalSaatIni) btn.classList.add('soal-saat-ini');
+    });
+}
+function mulaiTimer() {
+    clearInterval(timer);
+    timer = setInterval(()=>{
+        waktuSisa--;
+        let j=Math.floor(waktuSisa/3600), m=Math.floor((waktuSisa%3600)/60), d=waktuSisa%60;
+        document.getElementById('timer').textContent = `${j.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${d.toString().padStart(2,'0')}`;
+        if(waktuSisa<=0){clearInterval(timer); alert('Waktu habis!'); selesaikan();}
+    },1000);
+}
+
+document.getElementById('btn-sebelumnya').onclick = ()=>{if(soalSaatIni>0){soalSaatIni--; muatSoal();}};
+document.getElementById('btn-selanjutnya').onclick = ()=>{if(soalSaatIni<daftarSoal.length-1){soalSaatIni++; muatSoal();}};
+
+async function selesaikan() {
+    if(!confirm('Yakin akhiri ujian? Jawaban tak bisa diubah lagi.')) return;
+    clearInterval(timer);
+    let benar=0; daftarSoal.forEach((s,i)=>{if(jawabanPengguna[i]===s.jawabanBenar) benar++;});
+    const nilai = Math.round((benar/daftarSoal.length)*100);
+    const lulus = nilai>=nilaiLulus;
+    try {
+        await db.ref('hasilPeserta').push({
+            nama: dataPeserta.nama, asal: dataPeserta.asal, percobaanKe, jawaban: jawabanPengguna, benar, salah: daftarSoal.length-benar, nilai, lulus, waktuMulai: dataPeserta.waktuMulai, waktuSelesai: new Date().toISOString()
+        });
+        tampilkanBerhasil("✅ Hasil sudah tersimpan ke database!");
+    } catch (err) {
+        tampilkanError("❌ Gagal simpan: " + err.message);
+        return;
+    }
+    document.getElementById('halaman-ujian').classList.add('hidden');
+    document.getElementById('halaman-hasil').classList.remove('hidden');
+    document.getElementById('h-total').textContent = daftarSoal.length;
+    document.getElementById('h-benar').textContent = benar;
+    document.getElementById('h-salah').textContent = daftarSoal.length-benar;
+    document.getElementById('h-nilai').textContent = nilai;
+    if(lulus){
+        document.getElementById('status-lulus').textContent = `🎉 SELAMAT LULUS (Nilai Minimal: ${nilaiLulus})`;
+        document.getElementById('status-lulus').className = 'text-lg font-semibold mt-4 mb-6 text-green-600';
+        document.getElementById('btn-ujian-ulang').classList.add('hidden');
+    }else{
+        document.getElementById('status-lulus').textContent = `😞 BELUM LULUS (Nilai Minimal: ${nilaiLulus})`;
+        document.getElementById('status-lulus').className = 'text-lg font-semibold mt-4 mb-6 text-red-600';
+        document.getElementById('btn-ujian-ulang').classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+    document.getElementById('tombol-mulai').addEventListener('click', mulaiUjian);
+    document.getElementById('btn-selesai').addEventListener('click', selesaikan);
+    document.getElementById('btn-ujian-ulang').addEventListener('click', ujianUlang);
+});
+</script>
+</body>
+</html>
