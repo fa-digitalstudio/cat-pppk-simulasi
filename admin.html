@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id-ID">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Tryout PPPK</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold text-center mb-6">PANEL ADMIN TRYOUT PPPK</h1>
+    <div id="pesan-error" class="hidden bg-red-100 p-3 rounded-lg text-red-700 mb-4"></div>
+    <div id="pesan-berhasil" class="hidden bg-green-100 p-3 rounded-lg text-green-700 mb-4"></div>
+
+    <!-- Pengaturan Nilai Lulus -->
+    <div class="bg-white p-5 rounded-xl shadow mb-6">
+        <h3 class="font-semibold mb-3">Pengaturan Nilai Kelulusan</h3>
+        <div class="flex flex-wrap gap-3 items-center">
+            <input type="number" id="minimal-lulus" min="0" max="100" value="70" class="w-24 p-2 border rounded">
+            <button onclick="simpanNilaiLulus()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Simpan Batas Nilai</button>
+        </div>
+    </div>
+
+    <!-- Form Input Soal -->
+    <div class="bg-white p-5 rounded-xl shadow mb-6">
+        <h3 class="font-semibold mb-3">Input Soal (Maksimal Total 50 Soal)</h3>
+        <div class="space-y-3">
+            <select id="kategori" class="w-full p-2 border rounded">
+                <option value="Kompetensi Teknis">Kompetensi Teknis</option>
+                <option value="Kompetensi Manajerial">Kompetensi Manajerial</option>
+                <option value="Kompetensi Sosio-Kultural">Kompetensi Sosio-Kultural</option>
+            </select>
+            <textarea id="input-soal" rows="3" class="w-full p-2 border rounded" placeholder="Tuliskan soal..." required></textarea>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input type="text" id="pilA" class="p-2 border rounded" placeholder="Pilihan A" required>
+                <input type="text" id="pilB" class="p-2 border rounded" placeholder="Pilihan B" required>
+                <input type="text" id="pilC" class="p-2 border rounded" placeholder="Pilihan C" required>
+                <input type="text" id="pilD" class="p-2 border rounded" placeholder="Pilihan D" required>
+                <input type="text" id="pilE" class="p-2 border rounded md:col-span-2" placeholder="Pilihan E (opsional)">
+            </div>
+            <select id="jawaban-benar" class="w-full p-2 border rounded">
+                <option value="A">Jawaban Benar: A</option>
+                <option value="B">Jawaban Benar: B</option>
+                <option value="C">Jawaban Benar: C</option>
+                <option value="D">Jawaban Benar: D</option>
+                <option value="E">Jawaban Benar: E</option>
+            </select>
+            <button onclick="tambahSoal()" class="bg-green-600 text-white w-full py-2 rounded hover:bg-green-700">Simpan Soal</button>
+        </div>
+    </div>
+
+    <!-- Daftar Soal Tersimpan -->
+    <div class="bg-white p-5 rounded-xl shadow mb-6">
+        <h3 class="font-semibold mb-3 flex justify-between items-center">
+            <span>Daftar Soal Tersimpan (<span id="jumlah-soal">0</span> / 50)</span>
+            <button onclick="hapusSemuaSoal()" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Hapus Semua Soal</button>
+        </h3>
+        <div id="daftar-soal-terisi" class="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+            <p class="text-gray-500 text-center py-8">Belum ada soal yang dimasukkan</p>
+        </div>
+    </div>
+
+    <!-- Daftar Hasil Peserta -->
+    <div class="bg-white p-5 rounded-xl shadow">
+        <h3 class="font-semibold mb-3">Daftar Hasil Peserta</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-2 text-left">Nama</th>
+                        <th class="p-2 text-left">Asal Sekolah</th>
+                        <th class="p-2 text-center">Percobaan Ke</th>
+                        <th class="p-2 text-center">Benar</th>
+                        <th class="p-2 text-center">Salah</th>
+                        <th class="p-2 text-center">Nilai</th>
+                        <th class="p-2 text-center">Status</th>
+                        <th class="p-2 text-center">Waktu Selesai</th>
+                    </tr>
+                </thead>
+                <tbody id="tabel-peserta">
+                    <tr><td colspan="8" class="p-4 text-center text-gray-500">Sedang memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// ✅ SUDAH LENGKAP TERMASUK ALAMAT DATABASE
+const firebaseConfig = {
+  apiKey: "AIzaSyA0H2F5z7-3MVFXBeqBEuUJ7sYZt48C_PQ",
+  authDomain: "pppk-2bde2.firebaseapp.com",
+  projectId: "pppk-2bde2",
+  storageBucket: "pppk-2bde2.firebasestorage.app",
+  messagingSenderId: "993392180424",
+  appId: "1:993392180424:web:7859ec4e038a1ca570b9fd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function tampilkanPesan(pesan, jenis='sukses') {
+    const elSukses = document.getElementById('pesan-berhasil');
+    const elError = document.getElementById('pesan-error');
+    elSukses.classList.add('hidden');
+    elError.classList.add('hidden');
+    if(jenis==='sukses'){
+        elSukses.textContent = pesan; elSukses.classList.remove('hidden');
+        setTimeout(()=>elSukses.classList.add('hidden'),3000);
+    }else{
+        elError.textContent = pesan; elError.classList.remove('hidden');
+    }
+}
+
+async function simpanNilaiLulus() {
+    const nilai = Number(document.getElementById('minimal-lulus').value);
+    if (isNaN(nilai) || nilai < 0 || nilai > 100) return alert('Masukkan nilai antara 0-100!');
+    try {
+        await db.ref('pengaturan/nilaiLulus').set(nilai);
+        tampilkanPesan(`✅ Batas nilai lulus diubah menjadi ${nilai}`);
+    } catch (err) {
+        tampilkanPesan("❌ Gagal simpan: " + err.message, 'gagal');
+    }
+}
+
+async function tambahSoal() {
+    const jumlahSoalSaatIni = await db.ref('soal').once('value');
+    const dataSoalSekarang = jumlahSoalSaatIni.val() || {};
+    if (Object.keys(dataSoalSekarang).length >= 50) {
+        return alert("Maksimal hanya 50 soal! Hapus soal lama dulu.");
+    }
+
+    const soal = document.getElementById('input-soal').value.trim();
+    if (!soal) return alert('Isi bagian soal terlebih dahulu!');
+
+    const dataSoalBaru = {
+        kategori: document.getElementById('kategori').value,
+        soal: soal,
+        pilihan: {
+            A: document.getElementById('pilA').value.trim(),
+            B: document.getElementById('pilB').value.trim(),
+            C: document.getElementById('pilC').value.trim(),
+            D: document.getElementById('pilD').value.trim(),
+            E: document.getElementById('pilE').value.trim() || 'Tidak ada'
+        },
+        jawabanBenar: document.getElementById('jawaban-benar').value
+    };
+
+    try {
+        await db.ref('soal').push(dataSoalBaru);
+        tampilkanPesan('✅ Soal berhasil disimpan!');
+        document.getElementById('input-soal').value = '';
+        document.getElementById('pilA').value = '';
+        document.getElementById('pilB').value = '';
+        document.getElementById('pilC').value = '';
+        document.getElementById('pilD').value = '';
+        document.getElementById('pilE').value = '';
+    } catch (err) {
+        tampilkanPesan("❌ Gagal simpan soal: " + err.message, 'gagal');
+    }
+}
+
+// ✅ BACA HASIL PESERTA DENGAN BENAR
+db.ref('hasilPeserta').on('value', (snap) => {
+    const elTabel = document.getElementById('tabel-peserta');
+    const dataMentah = snap.val();
+
+    if (!dataMentah) {
+        elTabel.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">Belum ada hasil ujian masuk</td></tr>';
+        return;
+    }
+
+    // Ubah jadi daftar urut dari yang paling baru
+    const daftarHasil = Object.entries(dataMentah)
+        .map(([id, data]) => ({ ...data, idUnik: id }))
+        .reverse();
+
+    elTabel.innerHTML = '';
+    daftarHasil.forEach(data => {
+        const waktu = data.waktuSelesai ? new Date(data.waktuSelesai).toLocaleString('id-ID') : '-';
+        elTabel.innerHTML += `
+        <tr class="border-t hover:bg-gray-50">
+            <td class="p-2">${data.nama || '-'}</td>
+            <td class="p-2">${data.asal || '-'}</td>
+            <td class="p-2 text-center">${data.percobaanKe || '1'}</td>
+            <td class="p-2 text-center font-medium text-green-600">${data.benar || 0}</td>
+            <td class="p-2 text-center font-medium text-red-600">${data.salah || 0}</td>
+            <td class="p-2 text-center font-bold">${data.nilai || 0}</td>
+            <td class="p-2 text-center font-medium ${data.lulus ? 'text-green-600' : 'text-red-600'}">${data.lulus ? '✅ LULUS' : '❌ BELUM LULUS'}</td>
+            <td class="p-2 text-xs text-gray-600">${waktu}</td>
+        </tr>`;
+    });
+}, err => {
+    document.getElementById('tabel-peserta').innerHTML = `<tr><td colspan="8" class="p-4 text-center text-red-600">Kesalahan baca data: ${err.message}</td></tr>`;
+});
+
+// Tampilkan daftar soal tersimpan
+db.ref('soal').on('value', (snap) => {
+    const data = snap.val() || {};
+    const kunciSoal = Object.keys(data);
+    document.getElementById('jumlah-soal').textContent = kunciSoal.length;
+    const wadah = document.getElementById('daftar-soal-terisi');
+    wadah.innerHTML = '';
+
+    if (kunciSoal.length === 0) {
+        wadah.innerHTML = '<p class="text-gray-500 text-center py-8">Belum ada soal yang dimasukkan</p>';
+        return;
+    }
+
+    let nomor = 1;
+    for (const kunci of kunciSoal) {
+        const s = data[kunci];
+        wadah.innerHTML += `
+        <div class="border border-gray-200 p-4 rounded-lg bg-gray-50">
+            <div class="flex justify-between gap-2 mb-2">
+                <span class="font-semibold">Soal ${nomor} — <span class="text-blue-600">${s.kategori}</span></span>
+                <button onclick="hapusSatuSoal('${kunci}')" class="text-red-500 hover:text-red-700 text-sm font-medium">🗑️ Hapus</button>
+            </div>
+            <p class="mb-3">${s.soal}</p>
+            <div class="space-y-1 text-sm">
+                <p ${s.jawabanBenar==='A'?'class="font-bold text-green-700 bg-green-50 p-1 rounded"':''}>A. ${s.pilihan.A}</p>
+                <p ${s.jawabanBenar==='B'?'class="font-bold text-green-700 bg-green-50 p-1 rounded"':''}>B. ${s.pilihan.B}</p>
+                <p ${s.jawabanBenar==='C'?'class="font-bold text-green-700 bg-green-50 p-1 rounded"':''}>C. ${s.pilihan.C}</p>
+                <p ${s.jawabanBenar==='D'?'class="font-bold text-green-700 bg-green-50 p-1 rounded"':''}>D. ${s.pilihan.D}</p>
+                ${s.pilihan.E !== 'Tidak ada' ? `<p ${s.jawabanBenar==='E'?'class="font-bold text-green-700 bg-green-50 p-1 rounded"':''}>E. ${s.pilihan.E}</p>` : ''}
+            </div>
+        </div>`;
+        nomor++;
+    }
+});
+
+async function hapusSatuSoal(kunci) {
+    if (!confirm('Yakin hapus soal ini? Tidak bisa dikembalikan!')) return;
+    await db.ref('soal/' + kunci).remove();
+    tampilkanPesan('✅ Soal berhasil dihapus');
+}
+
+async function hapusSemuaSoal() {
+    if (!confirm('⚠️ PERINGATAN: Semua soal akan hilang permanen! Yakin lanjut?')) return;
+    await db.ref('soal').remove();
+    tampilkanPesan('✅ Seluruh soal telah dibersihkan');
+}
+</script>
+</body>
+</html>
