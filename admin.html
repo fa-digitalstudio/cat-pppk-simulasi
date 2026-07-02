@@ -14,16 +14,14 @@
     <div id="pesan-error" class="hidden bg-red-100 p-3 rounded-lg text-red-700 mb-4"></div>
     <div id="pesan-berhasil" class="hidden bg-green-100 p-3 rounded-lg text-green-700 mb-4"></div>
 
-    <!-- Pengaturan Nilai Lulus -->
     <div class="bg-white p-5 rounded-xl shadow mb-6">
         <h3 class="font-semibold mb-3">Pengaturan Nilai Kelulusan</h3>
         <div class="flex flex-wrap gap-3 items-center">
-            <input type="number" id="minimal-lulus" min="0" max="100" value="70" class="w-24 p-2 border rounded">
+            <input type="number" id="minimal-lulus" min="0" max="100" class="w-24 p-2 border rounded">
             <button onclick="simpanNilaiLulus()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Simpan Batas Nilai</button>
         </div>
     </div>
 
-    <!-- Form Input Soal -->
     <div class="bg-white p-5 rounded-xl shadow mb-6">
         <h3 class="font-semibold mb-3">Input Soal (Maksimal Total 50 Soal)</h3>
         <div class="space-y-3">
@@ -51,7 +49,6 @@
         </div>
     </div>
 
-    <!-- Daftar Soal Tersimpan -->
     <div class="bg-white p-5 rounded-xl shadow mb-6">
         <h3 class="font-semibold mb-3 flex justify-between items-center">
             <span>Daftar Soal Tersimpan (<span id="jumlah-soal">0</span> / 50)</span>
@@ -62,9 +59,11 @@
         </div>
     </div>
 
-    <!-- Daftar Hasil Peserta -->
     <div class="bg-white p-5 rounded-xl shadow">
-        <h3 class="font-semibold mb-3">Daftar Hasil Peserta</h3>
+        <h3 class="font-semibold mb-3 flex justify-between items-center">
+            <span>Daftar Hasil Peserta</span>
+            <button onclick="downloadHasilCSV()" class="text-xs bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700">Download CSV</button>
+        </h3>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-100">
@@ -77,10 +76,11 @@
                         <th class="p-2 text-center">Nilai</th>
                         <th class="p-2 text-center">Status</th>
                         <th class="p-2 text-center">Waktu Selesai</th>
+                        <th class="p-2 text-center">Aksi</th>
                     </tr>
                 </thead>
                 <tbody id="tabel-peserta">
-                    <tr><td colspan="8" class="p-4 text-center text-gray-500">Sedang memuat data...</td></tr>
+                    <tr><td colspan="9" class="p-4 text-center text-gray-500">Sedang memuat data...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -100,6 +100,15 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// ✅ SINKRONISASI PENGATURAN NILAI LULUS DARI FIREBASE
+db.ref('pengaturan/nilaiLulus').on('value', (snap) => {
+    if(snap.exists()) {
+        document.getElementById('minimal-lulus').value = snap.val();
+    } else {
+        document.getElementById('minimal-lulus').value = 70; // Default jika belum ada
+    }
+});
 
 function tampilkanPesan(pesan, jenis='sukses') {
     const elSukses = document.getElementById('pesan-berhasil');
@@ -162,13 +171,13 @@ async function tambahSoal() {
     }
 }
 
-// ✅ BACA HASIL PESERTA DENGAN BENAR
+// ✅ BACA HASIL PESERTA DENGAN BENAR (Ditambah tombol hapus per siswa)
 db.ref('hasilPeserta').on('value', (snap) => {
     const elTabel = document.getElementById('tabel-peserta');
     const dataMentah = snap.val();
 
     if (!dataMentah) {
-        elTabel.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">Belum ada hasil ujian masuk</td></tr>';
+        elTabel.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">Belum ada hasil ujian masuk</td></tr>';
         return;
     }
 
@@ -190,10 +199,13 @@ db.ref('hasilPeserta').on('value', (snap) => {
             <td class="p-2 text-center font-bold">${data.nilai || 0}</td>
             <td class="p-2 text-center font-medium ${data.lulus ? 'text-green-600' : 'text-red-600'}">${data.lulus ? '✅ LULUS' : '❌ BELUM LULUS'}</td>
             <td class="p-2 text-xs text-gray-600">${waktu}</td>
+            <td class="p-2 text-center">
+                <button onclick="hapusSatuHasil('${data.idUnik}')" class="bg-red-100 text-red-600 px-2 py-1 rounded text-xs hover:bg-red-200">Hapus</button>
+            </td>
         </tr>`;
     });
 }, err => {
-    document.getElementById('tabel-peserta').innerHTML = `<tr><td colspan="8" class="p-4 text-center text-red-600">Kesalahan baca data: ${err.message}</td></tr>`;
+    document.getElementById('tabel-peserta').innerHTML = `<tr><td colspan="9" class="p-4 text-center text-red-600">Kesalahan baca data: ${err.message}</td></tr>`;
 });
 
 // Tampilkan daftar soal tersimpan
@@ -241,6 +253,60 @@ async function hapusSemuaSoal() {
     if (!confirm('⚠️ PERINGATAN: Semua soal akan hilang permanen! Yakin lanjut?')) return;
     await db.ref('soal').remove();
     tampilkanPesan('✅ Seluruh soal telah dibersihkan');
+}
+
+// ✅ FUNGSI HAPUS SATU HASIL PESERTA
+async function hapusSatuHasil(kunci) {
+    if (!confirm('Yakin ingin menghapus hasil peserta ini? Data tidak bisa dikembalikan!')) return;
+    try {
+        await db.ref('hasilPeserta/' + kunci).remove();
+        tampilkanPesan('✅ Hasil peserta berhasil dihapus');
+    } catch (err) {
+        tampilkanPesan("❌ Gagal hapus data: " + err.message, 'gagal');
+    }
+}
+
+// ✅ FUNGSI DOWNLOAD HASIL PESERTA KE CSV
+async function downloadHasilCSV() {
+    try {
+        const snap = await db.ref('hasilPeserta').once('value');
+        const dataMentah = snap.val();
+
+        if (!dataMentah) {
+            return alert('Tidak ada data hasil peserta untuk di-download!');
+        }
+
+        // Header CSV
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Nama,Asal Sekolah,Percobaan Ke,Benar,Salah,Nilai,Status,Waktu Selesai\n";
+
+        // Isi Data CSV
+        Object.values(dataMentah).forEach(data => {
+            const nama = data.nama ? data.nama.replace(/,/g, '') : '-';
+            const asal = data.asal ? data.asal.replace(/,/g, '') : '-';
+            const percobaan = data.percobaanKe || '1';
+            const benar = data.benar || 0;
+            const salah = data.salah || 0;
+            const nilai = data.nilai || 0;
+            const status = data.lulus ? 'LULUS' : 'BELUM LULUS';
+            const waktu = data.waktuSelesai ? new Date(data.waktuSelesai).toLocaleString('id-ID').replace(/,/g, '') : '-';
+            
+            const row = `"${nama}","${asal}","${percobaan}","${benar}","${salah}","${nilai}","${status}","${waktu}"`;
+            csvContent += row + "\n";
+        });
+
+        // Buat file dan trigger download
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "hasil_peserta_tryout.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+    } catch (err) {
+        alert("Gagal mengunduh CSV: " + err.message);
+    }
 }
 </script>
 </body>
